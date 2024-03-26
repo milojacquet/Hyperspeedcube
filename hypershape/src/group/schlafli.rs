@@ -2,21 +2,38 @@ use hypermath::collections::{approx_hashmap::ApproxHashMapKey, ApproxHashMap};
 use hypermath::prelude::*;
 use itertools::Itertools;
 
-use super::{GroupResult, IsometryGroup};
+use super::{GroupError, GroupResult, IsometryGroup};
 
 /// Schlafli symbol for a convex polytope.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct SchlafliSymbol {
-    indices: Vec<usize>,
+    indices: Vec<Vec<usize>>,
 }
 impl SchlafliSymbol {
     /// Constructs an integer Schlafli symbol.
-    pub const fn from_indices(indices: Vec<usize>) -> Self {
-        Self { indices }
+    pub fn from_linear_indices(indices: Vec<usize>) -> Self {
+        let dim = indices.len() + 1;
+        Self {
+            indices: (0..dim)
+                .map(|i| {
+                    (0..dim)
+                        .map(|j| {
+                            if i == j {
+                                1
+                            } else if i == j + 1 || j == i + 1 {
+                                indices[std::cmp::min(i, j)]
+                            } else {
+                                2
+                            }
+                        })
+                        .collect_vec()
+                })
+                .collect_vec(),
+        }
     }
 
     /// Returns the indices of the Schlafli symbol.
-    pub fn indices(&self) -> &[usize] {
+    pub fn indices(&self) -> &[Vec<usize>] {
         &self.indices
     }
 
@@ -26,82 +43,77 @@ impl SchlafliSymbol {
             .split(',')
             .map(|s| s.trim().parse().unwrap_or(0))
             .collect_vec();
-        Self::from_indices(xs)
+        Self::from_linear_indices(xs)
     }
 
     /// Number of dimensions of the polytope described by the Schlafli symbol.
     pub fn ndim(&self) -> u8 {
-        self.indices.len() as u8 + 1
+        self.indices.len() as u8
+    }
+
+    /// Returns the i,j-th entry of the Schläfli matrix.
+    pub fn mirror_dot(&self, i: usize, j: usize) -> f64 {
+        -(std::f64::consts::PI as Float / self.indices[i][j] as Float).cos()
     }
 
     /// Returns the list of mirrors.
-    pub fn mirrors(&self) -> Vec<Mirror> {
+    pub fn mirrors(&self) -> GroupResult<Vec<Mirror>> {
         let mut ret = vec![];
-        let mut last = Vector::unit(0);
-        for (i, &index) in self.indices.iter().enumerate() {
-            ret.push(Mirror(last.clone()));
-            // The final mirror vectors will look like this, with each row as a
-            // vector:
-            //
-            // ```
-            // [ ? 0 0 0 0 ]
-            // [ ? ? 0 0 0 ]
-            // [ 0 ? ? 0 0 ]
-            // [ 0 0 ? ? 0 ]
-            // [ 0 0 0 ? ? ]
-            // ```
-            //
-            // Each mirror vector is perpendicular to all the others except its
-            // neighbors.
-            //
-            // So to compute each next mirror vector, we only need to consider
-            // the previous one. Consider the third mirror vector:
-            //
-            // ```
-            // [ 0 ? ? 0 0 ]
-            // ```
-            //
-            // Only two axes are nonzero, and their values could be anything.
-            // The first nonzero axis is irrelevant, because that axis will be
-            // zero in the next vector. Let `q` be the value of the second
-            // nonzero axis.
-            let q = last[i as u8];
-            // `dot` is what we want the dot product of the new vector with the
-            // previous one to be.
-            // This is negated because the mirrors should face each other.
-            let dot = -(std::f64::consts::PI as Float / index as Float).cos();
-            // Since there's only one axis shared between the last vector and
-            // the new one, only that axis will affect the dot product.
-            let y = dot / q;
-            // Compute the other nonzero axis of the new vector such that the
-            // vector will be normalized.
-            let z = (1.0 - y * y).sqrt();
-            // Actually construct that vector.
-            last = Vector::zero(self.ndim());
-            last[i as u8] = y;
-            last[i as u8 + 1] = z;
+        // The final mirror vectors will look like this, with each row as a
+        // vector:
+        //
+        // ```
+        // [ ? 0 0 0 0 ]
+        // [ ? ? 0 0 0 ]
+        // [ ? ? ? 0 0 ]
+        // [ ? ? ? ? 0 ]
+        // [ ? ? ? ? ? ]
+        // ```
+        //
+        // If this matrix is `L`, `L Lᵀ = A`, where `A` is the Schläfli
+        // matrix of the Coxeter-Dynkin diagram. This is a Cholesky
+        // decomposition. We use the Cholesky–Banachiewicz algorithm.
+        // https://en.wikipedia.org/wiki/Cholesky_decomposition#Computation
+        for i in 0..self.indices.len() {
+            ret.push(Mirror(Vector::zero(self.ndim())));
+            for j in 0..=i {
+                let mut sum = 0.0;
+                for k in 0..j {
+                    sum += ret[i].0[k as u8] * ret[j].0[k as u8];
+                }
+
+                if i == j {
+                    let val = self.mirror_dot(i, i) - sum;
+                    if val < 0.0 {
+                        return Err(GroupError::CDHyperbolic);
+                    }
+                    ret[i].0[j as u8] = val.sqrt();
+                } else {
+                    ret[i].0[j as u8] = 1.0 / ret[j].0[j as u8] * (self.mirror_dot(i, j) - sum);
+                }
+            }
         }
-        ret.push(Mirror(last));
-        ret
+        Ok(ret)
     }
 
     /// Returns a matrix that transforms from the mirror basis (where each
     /// component of the vector gives a distance from a mirror plane) to the
     /// base space.
-    pub fn mirror_basis(&self) -> Option<Matrix> {
-        Matrix::from_cols(self.mirrors().into_iter().map(|Mirror(m)| m))
+    pub fn mirror_basis(&self) -> GroupResult<Matrix> {
+        Matrix::from_cols(self.mirrors()?.into_iter().map(|Mirror(m)| m))
             .transpose()
             .inverse()
+            .ok_or(GroupError::CDEuclidean)
     }
 
     /// Returns the list of mirrors as generators.
-    pub fn generators(&self) -> Vec<Isometry> {
-        self.mirrors().into_iter().map(|m| m.into()).collect()
+    pub fn generators(&self) -> GroupResult<Vec<Isometry>> {
+        Ok(self.mirrors()?.into_iter().map(|m| m.into()).collect())
     }
 
     /// Constructs the isometry group described by the Schlafli symbol.
     pub fn group(&self) -> GroupResult<IsometryGroup> {
-        IsometryGroup::from_generators(&self.generators())
+        IsometryGroup::from_generators(&self.generators()?)
     }
 
     /// Expands an object by the symmetry.
@@ -109,8 +121,8 @@ impl SchlafliSymbol {
         &self,
         object: T,
         transform: fn(&Isometry, &T) -> T,
-    ) -> Vec<T> {
-        let generators = self.generators();
+    ) -> GroupResult<Vec<T>> {
+        let generators = self.generators()?;
 
         let mut seen = ApproxHashMap::new();
         seen.insert(&object, ());
@@ -127,7 +139,7 @@ impl SchlafliSymbol {
             }
             next_unprocessed_index += 1;
         }
-        ret
+        Ok(ret)
     }
 }
 
@@ -180,7 +192,9 @@ mod tests {
 
     #[test]
     fn test_cube_group() {
-        let g = SchlafliSymbol::from_indices(vec![4, 3]).group().unwrap();
+        let g = SchlafliSymbol::from_linear_indices(vec![4, 3])
+            .group()
+            .unwrap();
 
         assert_eq!(48, g.element_count());
     }

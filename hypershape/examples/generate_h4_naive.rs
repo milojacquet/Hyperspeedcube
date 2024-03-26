@@ -6,7 +6,9 @@ use hypershape::group::{Group, SchlafliSymbol};
 
 fn main() {
     let before = std::time::Instant::now();
-    let g = SchlafliSymbol::from_indices(vec![5, 3, 3]).group().unwrap();
+    let g = SchlafliSymbol::from_linear_indices(vec![5, 3, 3])
+        .group()
+        .unwrap();
     let after = std::time::Instant::now();
     println!("{:?}", after - before);
 
