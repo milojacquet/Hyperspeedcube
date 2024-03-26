@@ -45,10 +45,12 @@ pub enum GroupError {
     #[error("bad inverse; inverse of {0} is {1} but inverse of {1} is {2}")]
     BadInverse(ElementId, ElementId, ElementId),
 
-    #[error("coxeter-dynkin diagram is hyperbolic")]
+    #[error("coxeter-dynkin diagram is not spherical")]
     CDHyperbolic,
     #[error("coxeter-dynkin diagram is euclidean")]
     CDEuclidean,
+    #[error("invalid coxeter-dynkin diagram")]
+    CDInvalid,
 }
 impl From<IndexOutOfRange> for GroupError {
     fn from(value: IndexOutOfRange) -> Self {

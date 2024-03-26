@@ -2,7 +2,7 @@ use hypermath::collections::{approx_hashmap::ApproxHashMapKey, ApproxHashMap};
 use hypermath::prelude::*;
 use itertools::Itertools;
 
-use super::{GroupError, GroupResult, IsometryGroup};
+use super::{CoxeterGroup, GroupError, GroupResult, IsometryGroup};
 
 /// Schlafli symbol for a convex polytope.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -26,6 +26,46 @@ impl SchlafliSymbol {
                                 2
                             }
                         })
+                        .collect_vec()
+                })
+                .collect_vec(),
+        }
+    }
+
+    /// Constructs and validates integer Schlafli symbol.
+    pub fn from_matrix_indices(indices: Vec<Vec<usize>>) -> GroupResult<Self> {
+        let dim = indices.len();
+        // Index matrix is not square
+        if indices.iter().any(|r| r.len() != dim) {
+            return Err(GroupError::CDInvalid);
+        }
+
+        for i in 0..dim {
+            for j in 0..=i {
+                // Index matrix has non-positive integer
+                if indices[i][j] < 1 {
+                    return Err(GroupError::CDInvalid);
+                }
+                // Index matrix has ones off diagonal or no ones on diagonal
+                if (i == j) != (indices[i][j] == 1) {
+                    return Err(GroupError::CDInvalid);
+                }
+                // Index matrix is not symmetric
+                if indices[i][j] != indices[j][i] {
+                    return Err(GroupError::CDInvalid);
+                }
+            }
+        }
+        Ok(Self { indices })
+    }
+
+    /// Convert Coxeter group to SchlafliSymbol.
+    pub fn from_coxeter_group(c: CoxeterGroup) -> SchlafliSymbol {
+        Self {
+            indices: (0..c.generator_count())
+                .map(|i| {
+                    (0..c.generator_count())
+                        .map(|j| c.coxeter_matrix_element(i, j) as usize)
                         .collect_vec()
                 })
                 .collect_vec(),

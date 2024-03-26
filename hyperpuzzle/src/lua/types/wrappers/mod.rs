@@ -7,10 +7,12 @@ use rlua::prelude::*;
 
 #[macro_use]
 mod macros;
+mod coxeter_group;
 mod multivector_index;
 mod ndim;
 mod vector_index;
 
+pub use coxeter_group::LuaCoxeterGroupSymbol;
 pub use macros::{LuaNamedUserData, LuaUserDataConvertWrap};
 pub use multivector_index::{LuaMultivectorIndex, NiNo};
 pub use ndim::LuaNdim;

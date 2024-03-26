@@ -4,10 +4,16 @@ use itertools::Itertools;
 
 pub use super::*;
 
+fn group_error_to_lua(e: GroupError) -> LuaError {
+    LuaError::external(e.to_string())
+}
+
 lua_userdata_value_conversion_wrapper! {
     #[name = "coxeter group", convert_str = "coxeter group"]
     pub struct LuaCoxeterGroup(SchlafliSymbol) = |_lua| {
-        <LuaTable<'_>>(t) => Ok(LuaCoxeterGroup::construct_from_table(t)?),
+        LuaValue::Table(t) => Ok(LuaCoxeterGroup::construct_from_table(t)?),
+        //LuaValue::String(s) => s.to_str()?.parse().map(|c: LuaCoxeterGroupSymbol| SchlafliSymbol::from_coxeter_group(c.0)),
+        // TODO: fix this "error converting Lua string to table"
     }
 }
 
@@ -15,7 +21,8 @@ impl LuaCoxeterGroup {
     fn construct_from_table(t: LuaTable<'_>) -> LuaResult<SchlafliSymbol> {
         t.sequence_values()
             .try_collect()
-            .map(SchlafliSymbol::from_indices)
+            .map(SchlafliSymbol::from_linear_indices)
+        // TODO: add matrix input for nonlinear diagrams
     }
 
     pub fn construct_from_cd_table(
@@ -34,9 +41,13 @@ impl LuaUserData for LuaNamedUserData<SchlafliSymbol> {
             expand_vec_lua_iter(lua, this, args)
         });
 
-        methods.add_meta_method(LuaMetaMethod::ToString, |_lua, Self(this), ()| {
-            Ok(this.indices().iter().map(|i| i.to_string()).join("o"))
-        });
+        methods.add_meta_method(
+            LuaMetaMethod::ToString,
+            |_lua, Self(this), ()| -> LuaResult<String> {
+                //Ok(this.indices().iter().map(|i| i.to_string()).join("o"))
+                todo!()
+            },
+        );
 
         methods.add_method("expand", |lua, Self(this), args| {
             expand_vec_lua_iter(lua, this, args)
@@ -62,6 +73,7 @@ fn expand_vec_lua_iter<'lua>(
     let vector = vec_from_args(lua, s, args)?;
     let mut vectors_iter = s
         .expand(vector, |t, point| t.transform_vector(point))
+        .map_err(group_error_to_lua)?
         .into_iter()
         .map(LuaVector);
     lua.create_function_mut(move |_lua, ()| Ok(vectors_iter.next()))
@@ -84,8 +96,7 @@ fn vec_from_args<'lua>(
 }
 
 fn mirror_basis(s: &SchlafliSymbol) -> LuaResult<Matrix> {
-    s.mirror_basis()
-        .ok_or_else(|| LuaError::external("coxeter diagram matrix be invertible"))
+    s.mirror_basis().map_err(group_error_to_lua)
 }
 
 fn parse_wendy_krieger_vector(ndim: u8, s: &str) -> LuaResult<Vector> {
