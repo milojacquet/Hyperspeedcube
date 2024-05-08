@@ -79,8 +79,10 @@ impl<'space> SimplicialComplex<'space> {
         // This is scaled by some factor depending on the number of
         // dimensions but that's fine.
         remaining_verts
-            .map(|v| Blade::from_vector(ndim, v - init))
-            .try_fold(Blade::one(ndim), |a, b| Blade::wedge(&a, &b))
+            .map(|v| Blade::from_vector(ndim, v - init, self.space.hyperbolic))
+            .try_fold(Blade::one(ndim, self.space.hyperbolic), |a, b| {
+                Blade::wedge(&a, &b)
+            })
     }
 
     /// Returns a simplicial complex representing a polytope.

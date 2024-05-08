@@ -22,12 +22,6 @@ pub struct IsometryGroup {
     nearest_neighbors: MotorNearestNeighborMap<ElementId>,
 }
 
-impl Default for IsometryGroup {
-    fn default() -> Self {
-        Self::from_generators(&[]).expect("failed to construct trivial group")
-    }
-}
-
 impl Group for IsometryGroup {
     fn group(&self) -> &AbstractGroup {
         &self.group
@@ -52,7 +46,7 @@ impl Index<GeneratorId> for IsometryGroup {
 
 impl IsometryGroup {
     /// Construct a group from a set of generators.
-    pub fn from_generators(generators: &[pga::Motor]) -> GroupResult<Self> {
+    pub fn from_generators(generators: &[pga::Motor], hyperbolic: bool) -> GroupResult<Self> {
         let generator_count = generators.len();
 
         let mut g = GroupBuilder::new(generator_count)?;
@@ -69,9 +63,9 @@ impl IsometryGroup {
             })
             .try_collect()?;
 
-        let mut elements = PerElement::from_iter([pga::Motor::ident(ndim)]);
+        let mut elements = PerElement::from_iter([pga::Motor::ident(ndim, hyperbolic)]);
         let mut element_ids = ApproxHashMap::new();
-        element_ids.insert(pga::Motor::ident(ndim), ElementId::IDENTITY);
+        element_ids.insert(pga::Motor::ident(ndim, hyperbolic), ElementId::IDENTITY);
 
         // Computing inverses directly is doable, but might involve a lot of
         // floating-point math. Instead, keep track of the inverse of each
@@ -125,7 +119,7 @@ impl IsometryGroup {
                                 task.store(generators_ref.map_ref(|_id, gen| {
                                     (&new_elem * gen)
                                         .canonicalize()
-                                        .unwrap_or_else(|| pga::Motor::ident(ndim))
+                                        .unwrap_or_else(|| pga::Motor::ident(ndim, hyperbolic))
                                 }));
                             });
 
@@ -154,6 +148,20 @@ impl IsometryGroup {
             elements,
             nearest_neighbors,
         })
+    }
+
+    /// Construct a group from a nonempty set of generators.
+    pub fn from_generators_nonempty(generators: &[pga::Motor]) -> GroupResult<Self> {
+        if generators.len() == 0 {
+            panic!("could not construct group with no generators")
+        }
+
+        Self::from_generators(generators, generators[0].hyperbolic)
+    }
+
+    /// Constructs the trivial group.
+    pub fn trivial(hyperbolic: bool) -> Self {
+        Self::from_generators(&[], hyperbolic).expect("failed to construct trivial group")
     }
 
     /// Returns the nearest element.
@@ -206,11 +214,12 @@ mod tests {
     #[test]
     fn test_cyclic_groups() {
         fn cyclic_group(n: Float) -> IsometryGroup {
-            IsometryGroup::from_generators(&[pga::Motor::from_angle_in_normalized_plane(
+            IsometryGroup::from_generators_nonempty(&[pga::Motor::from_angle_in_normalized_plane(
                 2,
                 Vector::unit(0),
                 Vector::unit(1),
                 std::f64::consts::PI as Float * 2.0 / n,
+                false,
             )])
             .unwrap()
         }

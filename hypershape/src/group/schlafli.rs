@@ -104,7 +104,8 @@ impl SchlafliSymbol {
 
     /// Constructs the isometry group described by the Schlafli symbol.
     pub fn group(&self) -> GroupResult<IsometryGroup> {
-        IsometryGroup::from_generators(&self.generators())
+        //
+        IsometryGroup::from_generators(&self.generators(), false)
     }
 
     /// Returns the orbit of an object under the symmetry.
@@ -124,7 +125,7 @@ impl SchlafliSymbol {
         seen.insert(object.clone(), ());
 
         let mut next_unprocessed_index = 0;
-        let mut ret = vec![(pga::Motor::ident(self.ndim()), object)];
+        let mut ret = vec![(pga::Motor::ident(self.ndim(), false), object)];
         while next_unprocessed_index < ret.len() {
             let (unprocessed_transform, unprocessed_object) = ret[next_unprocessed_index].clone();
             for gen in &generators {
@@ -156,7 +157,7 @@ impl From<Mirror> for Matrix {
 }
 impl Mirror {
     fn to_motor(&self, ndim: u8) -> pga::Motor {
-        pga::Motor::normalized_vector_reflection(ndim, &self.0)
+        pga::Motor::normalized_vector_reflection(ndim, &self.0, false)
     }
 }
 

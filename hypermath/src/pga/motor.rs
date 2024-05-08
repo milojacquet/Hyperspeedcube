@@ -18,7 +18,7 @@ pub struct Motor {
     /// subalgebra; otherwise it is an element of the even-grade PGA subalgebra.
     is_reflection: bool,
     /// Whether or not it is in hyperbolic GA (true) or projective GA (false).
-    pub(crate) hyperbolic: bool,
+    pub hyperbolic: bool,
     /// Coefficients of the terms of the multivector, ordered by the `Axes`
     /// values they correspond to.
     ///

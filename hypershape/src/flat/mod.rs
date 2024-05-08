@@ -38,6 +38,8 @@ hypermath::idx_struct! {
 /// Infinite Euclidean space in which polytopes can be constructed.
 pub struct Space {
     ndim: u8,
+    /// Whether or not it is in hyperbolic GA (true) or projective GA (false).
+    pub hyperbolic: bool,
 
     vertices: GenericVec<VertexId, Vector>,
     vertex_data_to_id: ApproxHashMap<Vector, VertexId>,
@@ -80,11 +82,12 @@ impl Space {
     /// # Panics
     ///
     /// Panics if `ndim > 7`.
-    pub fn new(ndim: u8) -> Self {
+    pub fn new(ndim: u8, hyperbolic: bool) -> Self {
         assert!(ndim >= 1, "ndim={ndim} is below min value of 1");
         assert!(ndim <= 7, "ndim={ndim} exceeds max value of 7");
         Self {
             ndim,
+            hyperbolic,
 
             vertices: GenericVec::new(),
             vertex_data_to_id: ApproxHashMap::new(),
@@ -453,7 +456,10 @@ impl Space {
         }
 
         let result = match &self[polytope] {
-            PolytopeData::Vertex(p) => (vec![], pga::Blade::from_point(ndim, &self[*p])),
+            PolytopeData::Vertex(p) => (
+                vec![],
+                pga::Blade::from_point(ndim, &self[*p], self.hyperbolic),
+            ),
             PolytopeData::Polytope { boundary, .. } => {
                 let boundary = boundary.clone();
                 // Select the blade with the largest magnitude -- this indicates
@@ -471,7 +477,7 @@ impl Space {
                     .vertex_set(polytope)
                     .iter()
                     .filter_map(|v| {
-                        let new_point = pga::Blade::from_point(ndim, &self[v]);
+                        let new_point = pga::Blade::from_point(ndim, &self[v], self.hyperbolic);
                         let new_blade = pga::Blade::wedge(&old_blade, &new_point)?;
                         Some((v, new_point, new_blade))
                     })

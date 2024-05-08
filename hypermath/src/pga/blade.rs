@@ -14,7 +14,7 @@ pub struct Blade {
     /// Grade of the blade.
     grade: u8,
     /// Whether or not it is in hyperbolic GA (true) or projective GA (false).
-    pub(crate) hyperbolic: bool,
+    pub hyperbolic: bool,
     /// Coefficients of the terms of the multivector, ordered by the `Axes`
     /// values they correspond to.
     coefficients: Box<[Float]>,
