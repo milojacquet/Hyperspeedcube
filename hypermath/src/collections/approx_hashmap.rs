@@ -199,7 +199,11 @@ impl ApproxHashMapKey for pga::Blade {
     type Hash = MultivectorHash;
 
     fn approx_hash(&self, mut float_hash_fn: impl FnMut(Float) -> FloatHash) -> Self::Hash {
-        let hash_term = |pga::Term { coef, axes }| (axes.bits() as u16, float_hash_fn(coef));
+        let hash_term = |pga::Term {
+                             coef,
+                             axes,
+                             hyperbolic: _,
+                         }| (axes.bits() as u16, float_hash_fn(coef));
         MultivectorHash(self.nonzero_terms().map(hash_term).collect())
     }
 }
@@ -207,7 +211,11 @@ impl ApproxHashMapKey for pga::Motor {
     type Hash = MultivectorHash;
 
     fn approx_hash(&self, mut float_hash_fn: impl FnMut(Float) -> FloatHash) -> Self::Hash {
-        let hash_term = |pga::Term { coef, axes }| (axes.bits() as u16, float_hash_fn(coef));
+        let hash_term = |pga::Term {
+                             coef,
+                             axes,
+                             hyperbolic: _,
+                         }| (axes.bits() as u16, float_hash_fn(coef));
         MultivectorHash(self.nonzero_terms().map(hash_term).collect())
     }
 }

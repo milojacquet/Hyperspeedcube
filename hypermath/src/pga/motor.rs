@@ -17,6 +17,8 @@ pub struct Motor {
     /// `true`, then the multivector is an element of the odd-grade PGA
     /// subalgebra; otherwise it is an element of the even-grade PGA subalgebra.
     is_reflection: bool,
+    /// Whether or not it is in hyperbolic GA (true) or projective GA (false).
+    pub(crate) hyperbolic: bool,
     /// Coefficients of the terms of the multivector, ordered by the `Axes`
     /// values they correspond to.
     ///
@@ -41,8 +43,8 @@ impl fmt::Display for Motor {
 
 impl Motor {
     /// Constructs the identity motor in `ndim` dimensions.
-    pub fn ident(ndim: u8) -> Self {
-        let mut ret = Self::zero(ndim, false);
+    pub fn ident(ndim: u8, hyperbolic: bool) -> Self {
+        let mut ret = Self::zero(ndim, false, hyperbolic);
         ret.set(Axes::SCALAR, 1.0);
         ret
     }
@@ -51,11 +53,11 @@ impl Motor {
         Self::reflection_across_blade(ndim, &Blade::from_hyperplane(ndim, hyperplane))
     }
     /// Constructs a motor representing a point reflection.
-    pub fn point_reflection(ndim: u8, point: Vector) -> Self {
-        Self::reflection_across_blade(ndim, &Blade::from_point(ndim, point))
+    pub fn point_reflection(ndim: u8, point: Vector, hyperbolic: bool) -> Self {
+        Self::reflection_across_blade(ndim, &Blade::from_point(ndim, point, hyperbolic))
     }
     fn reflection_across_blade(ndim: u8, blade: &Blade) -> Self {
-        let mut ret = Self::zero(ndim, true);
+        let mut ret = Self::zero(ndim, true, blade.hyperbolic);
         for term in blade.terms() {
             ret += term.right_complement(ndim);
         }
@@ -63,43 +65,73 @@ impl Motor {
     }
     /// Constructs a motor representing a reflection through the origin. Returns
     /// `None` if `vector` is zero.
-    pub fn vector_reflection(ndim: u8, vector: impl VectorRef) -> Option<Self> {
+    pub fn vector_reflection(ndim: u8, vector: impl VectorRef, hyperbolic: bool) -> Option<Self> {
         let v = vector.normalize()?;
-        Some(Self::normalized_vector_reflection(ndim, v))
+        Some(Self::normalized_vector_reflection(ndim, v, hyperbolic))
     }
     /// Constructs a motor representing a reflection through the origin.
     /// `vector` **must** be normalized.
-    pub fn normalized_vector_reflection(ndim: u8, vector: impl VectorRef) -> Self {
-        let mut ret = Self::zero(ndim, true);
+    pub fn normalized_vector_reflection(
+        ndim: u8,
+        vector: impl VectorRef,
+        hyperbolic: bool,
+    ) -> Self {
+        let mut ret = Self::zero(ndim, true, hyperbolic);
         for (i, x) in vector.iter_nonzero() {
             ret.set(Axes::euclidean(i), x);
         }
         ret
     }
     /// Constructs a motor representing a translation by `delta`.
-    pub fn translation(ndim: u8, delta: impl VectorRef) -> Self {
-        let mut ret = Self::ident(ndim);
-        for (i, x) in delta.iter_nonzero() {
-            ret += Term {
-                coef: x * -0.5,
-                axes: Axes::E0 | Axes::euclidean(i),
-            };
+    /// In hyperbolic space, the translation uses a tangent vector based at the
+    /// origin.
+    pub fn translation(ndim: u8, delta: impl VectorRef, hyperbolic: bool) -> Self {
+        if hyperbolic {
+            todo!()
+        } else {
+            let mut ret = Self::ident(ndim, hyperbolic);
+            for (i, x) in delta.iter_nonzero() {
+                ret += Term {
+                    coef: x * -0.5,
+                    axes: Axes::E0 | Axes::euclidean(i),
+                    hyperbolic,
+                };
+            }
+            ret
         }
-        ret
     }
     /// Constructs a rotation motor (also called a "rotor") that takes one
     /// vector to another.
-    pub fn rotation(ndim: u8, from: impl VectorRef, to: impl VectorRef) -> Option<Self> {
+    pub fn rotation(
+        ndim: u8,
+        from: impl VectorRef,
+        to: impl VectorRef,
+        hyperbolic: bool,
+    ) -> Option<Self> {
         let from = from.normalize()?;
         let to = to.normalize()?;
         let mid = (to + &from).normalize()?;
-        Some(Self::from_normalized_vector_product(ndim, from, mid))
+        Some(Self::from_normalized_vector_product(
+            ndim, from, mid, hyperbolic,
+        ))
     }
     /// Constructs a rotation from an angle in an axis-aligned plane.
     ///
     /// If the axes are the same, returns the identity.
-    pub fn from_angle_in_axis_plane(ndim: u8, a: u8, b: u8, angle: Float) -> Self {
-        Self::from_angle_in_normalized_plane(ndim, Vector::unit(a), Vector::unit(b), angle)
+    pub fn from_angle_in_axis_plane(
+        ndim: u8,
+        a: u8,
+        b: u8,
+        angle: Float,
+        hyperbolic: bool,
+    ) -> Self {
+        Self::from_angle_in_normalized_plane(
+            ndim,
+            Vector::unit(a),
+            Vector::unit(b),
+            angle,
+            hyperbolic,
+        )
     }
     /// Constructs a rotation motor (also called a "rotor") from one vector to
     /// another by an specific angle. `from` and `to` **must** be perpendicular
@@ -109,26 +141,34 @@ impl Motor {
         a: impl VectorRef,
         b: impl VectorRef,
         angle: Float,
+        hyperbolic: bool,
     ) -> Self {
         let half_angle = angle / 2.0;
         let cos = half_angle.cos();
         let sin = half_angle.sin();
         let mid = a.scale(cos) + b.scale(sin);
-        Self::from_normalized_vector_product(ndim, a, mid)
+        Self::from_normalized_vector_product(ndim, a, mid, hyperbolic)
     }
     /// Constructs a rotation motor (also called a "rotor") from one vector to
     /// another by twice the angle between them. `from` and `to` **must** be
     /// unit vectors.
-    pub fn from_normalized_vector_product(ndim: u8, a: impl VectorRef, b: impl VectorRef) -> Self {
-        Self::normalized_vector_reflection(ndim, b) * Self::normalized_vector_reflection(ndim, a)
+    pub fn from_normalized_vector_product(
+        ndim: u8,
+        a: impl VectorRef,
+        b: impl VectorRef,
+        hyperbolic: bool,
+    ) -> Self {
+        Self::normalized_vector_reflection(ndim, b, hyperbolic)
+            * Self::normalized_vector_reflection(ndim, a, hyperbolic)
     }
 
     /// Constructs a new zero motor which can then be filled with coefficients.
-    fn zero(ndim: u8, is_reflection: bool) -> Self {
+    fn zero(ndim: u8, is_reflection: bool, hyperbolic: bool) -> Self {
         Self {
             ndim,
             is_reflection,
             coefficients: vec![0.0; 1 << ndim].into_boxed_slice(),
+            hyperbolic,
         }
     }
 
@@ -171,7 +211,7 @@ impl Motor {
     }
     /// Returns whether the motor is the identity transformation.
     pub fn is_ident(&self) -> bool {
-        self.is_equivalent_to(&Motor::ident(self.ndim))
+        self.is_equivalent_to(&Motor::ident(self.ndim, self.hyperbolic))
     }
 
     /// Returns the `Axes` for the `i`th coefficient.
@@ -205,6 +245,7 @@ impl Motor {
         self.coefficients.iter().enumerate().map(|(i, &coef)| Term {
             coef,
             axes: self.axes_at_index(i),
+            hyperbolic: self.hyperbolic,
         })
     }
     /// Returns an iterator over the terms in the blade that are approximately
@@ -228,7 +269,7 @@ impl Motor {
         if ndim <= self.ndim {
             self.clone()
         } else {
-            let mut ret = Self::zero(ndim, self.is_reflection);
+            let mut ret = Self::zero(ndim, self.is_reflection, self.hyperbolic);
             for term in self.terms() {
                 ret += term;
             }
@@ -301,7 +342,7 @@ impl Motor {
     /// See also `transform_point()`.
     pub fn transform_vector(&self, v: impl VectorRef) -> Vector {
         let ndim = std::cmp::max(self.ndim, v.ndim());
-        self.transform(&Blade::from_vector(ndim, v))
+        self.transform(&Blade::from_vector(ndim, v, self.hyperbolic))
             .to_vector()
             .unwrap_or(vector![])
     }
@@ -310,7 +351,7 @@ impl Motor {
     /// See also `transform_vector()`.
     pub fn transform_point(&self, v: impl VectorRef) -> Vector {
         let ndim = std::cmp::max(self.ndim, v.ndim());
-        self.transform(&Blade::from_point(ndim, v))
+        self.transform(&Blade::from_point(ndim, v, self.hyperbolic))
             .to_point()
             .unwrap_or(vector![])
     }
@@ -361,6 +402,7 @@ impl Motor {
             coefficients: crate::util::pad_zip(a.coefs(), b.coefs())
                 .map(|(a, b)| a * scale1 + b * scale2)
                 .collect(),
+            hyperbolic: a.hyperbolic,
         })
     }
     /// Returns a naive linear interpolation between two motors.
@@ -373,13 +415,14 @@ impl Motor {
             coefficients: crate::util::pad_zip(a.coefs(), b.coefs())
                 .map(|(a, b)| crate::util::lerp(a, b, t))
                 .collect(),
+            hyperbolic: a.hyperbolic,
         })
     }
 
     /// Projects the motor into a lower or higher dimension without normalizing
     /// it.
     pub(crate) fn project_non_normalized(&self, ndim: u8) -> Motor {
-        let mut ret = Motor::zero(ndim, self.is_reflection);
+        let mut ret = Motor::zero(ndim, self.is_reflection, self.hyperbolic);
         let len = std::cmp::min(self.coefficients.len(), ret.coefficients.len());
         ret.coefficients[..len].copy_from_slice(&self.coefficients[..len]);
         ret
@@ -432,6 +475,7 @@ impl Mul<&Motor> for &Motor {
         let mut ret = Motor::zero(
             std::cmp::max(self.ndim, rhs.ndim),
             self.is_reflection ^ rhs.is_reflection,
+            self.hyperbolic,
         );
         for l in self.terms() {
             for r in rhs.terms() {
@@ -536,6 +580,7 @@ impl TransformByMotor for Hyperplane {
                 Hyperplane {
                     normal: vector![],
                     distance: 0.0,
+                    hyperbolic: self.hyperbolic,
                 }
             });
         // Transforming a blade reflects its orientation (a clockwise arrow on
@@ -552,7 +597,7 @@ impl TransformByMotor for Hyperplane {
 impl TransformByMotor for Blade {
     fn transform_by(&self, m: &Motor) -> Self {
         let ndim = std::cmp::max(m.ndim, self.ndim());
-        let mut result = Blade::zero(ndim, self.grade());
+        let mut result = Blade::zero(ndim, self.grade(), self.hyperbolic);
         for (u, l, r) in
             itertools::iproduct!(self.nonzero_terms(), m.nonzero_terms(), m.nonzero_terms())
         {
@@ -576,7 +621,7 @@ impl TransformByMotor for Blade {
 impl TransformByMotor for Motor {
     fn transform_by(&self, m: &Motor) -> Self {
         let ndim = std::cmp::max(m.ndim, self.ndim);
-        let mut result = Motor::zero(self.ndim, self.is_reflection);
+        let mut result = Motor::zero(self.ndim, self.is_reflection, self.hyperbolic);
         for (u, l, r) in
             itertools::iproduct!(self.nonzero_terms(), m.nonzero_terms(), m.nonzero_terms())
         {

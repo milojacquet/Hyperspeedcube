@@ -8,7 +8,8 @@ use crate::{
     AXIS_NAMES,
 };
 
-/// Hyperplane in Euclidean space, which is also used to represent a half-space.
+/// Hyperplane in Euclidean or hyperbolic space, which is also used to
+/// represent a half-space.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hyperplane {
     /// Normalized normal vector.
@@ -16,6 +17,8 @@ pub struct Hyperplane {
     /// Distance from the plane to the origin, perpendicular to the normal
     /// vector.
     pub(crate) distance: Float,
+    /// Whether or not it is in hyperbolic GA (true) or projective GA (false).
+    pub(crate) hyperbolic: bool,
 }
 
 impl fmt::Display for Hyperplane {
@@ -58,22 +61,38 @@ impl Hyperplane {
     /// `None` if `normal` is approximately zero.
     ///
     /// The normal vector need not be normalized.
-    pub fn new(normal: impl VectorRef, distance: Float) -> Option<Self> {
+    pub fn new(normal: impl VectorRef, distance: Float, hyperbolic: bool) -> Option<Self> {
         let normal = normal.normalize()?;
-        Some(Self { normal, distance })
+        Some(Self {
+            normal,
+            distance,
+            hyperbolic,
+        })
     }
     /// Constructs a new hyperplane from a pole vector. Returns `None` if `pole`
     /// is approximately zero.
-    pub fn from_pole(pole: impl VectorRef) -> Option<Self> {
+    pub fn from_pole(pole: impl VectorRef, hyperbolic: bool) -> Option<Self> {
         let mag = pole.mag();
-        Self::new(pole, mag)
+        Self::new(pole, mag, hyperbolic)
     }
     /// Constructs a new hyperplane from a normal vector and a point that it
     /// passes through. Returns `None` if `normal` is approximately zero.
-    pub fn through_point(normal: impl VectorRef, point: impl VectorRef) -> Option<Self> {
-        let normal = normal.normalize()?;
-        let distance = normal.dot(point);
-        Some(Self { normal, distance })
+    pub fn through_point(
+        normal: impl VectorRef,
+        point: impl VectorRef,
+        hyperbolic: bool,
+    ) -> Option<Self> {
+        if hyperbolic {
+            todo!()
+        } else {
+            let normal = normal.normalize()?;
+            let distance = normal.dot(point);
+            Some(Self {
+                normal,
+                distance,
+                hyperbolic,
+            })
+        }
     }
 
     /// Returns the (normalized) normal vector of the hyperplane.
@@ -102,6 +121,7 @@ impl Hyperplane {
         Self {
             normal: -&self.normal,
             distance: -self.distance,
+            hyperbolic: self.hyperbolic,
         }
     }
 

@@ -13,6 +13,8 @@ pub struct Blade {
     ndim: u8,
     /// Grade of the blade.
     grade: u8,
+    /// Whether or not it is in hyperbolic GA (true) or projective GA (false).
+    pub(crate) hyperbolic: bool,
     /// Coefficients of the terms of the multivector, ordered by the `Axes`
     /// values they correspond to.
     coefficients: Box<[Float]>,
@@ -62,42 +64,44 @@ impl IndexMut<Axes> for Blade {
 
 impl Blade {
     /// Constructs a new zero blade of grade `grade` in `ndim` dimensions.
-    pub fn zero(ndim: u8, grade: u8) -> Self {
+    pub fn zero(ndim: u8, grade: u8, hyperbolic: bool) -> Self {
         let len = super::multivector_term_order(ndim, grade).len();
         Self {
             ndim,
             grade,
             coefficients: vec![0.0; len].into_boxed_slice(),
+            hyperbolic,
         }
     }
     /// Constructs a unit blade of grade 0 in `ndim` dimensions.
-    pub fn one(ndim: u8) -> Self {
-        Self::scalar(ndim, 1.0)
+    pub fn one(ndim: u8, hyperbolic: bool) -> Self {
+        Self::scalar(ndim, 1.0, hyperbolic)
     }
     /// Constructs a blade of grade 0 in `ndim` dimensions.
-    pub fn scalar(ndim: u8, value: Float) -> Self {
+    pub fn scalar(ndim: u8, value: Float, hyperbolic: bool) -> Self {
         Self {
             ndim,
             grade: 0,
             coefficients: vec![value].into_boxed_slice(),
+            hyperbolic,
         }
     }
     /// Constructs a blade from a single term.
     pub fn from_term(ndim: u8, term: Term) -> Self {
-        let mut ret = Self::zero(ndim, term.grade());
+        let mut ret = Self::zero(ndim, term.grade(), term.hyperbolic);
         ret[term.axes] = term.coef;
         ret
     }
 
     /// Constructs a blade representing the point at the origin.
-    pub fn origin(ndim: u8) -> Self {
-        let mut ret = Self::zero(ndim, 1);
+    pub fn origin(ndim: u8, hyperbolic: bool) -> Self {
+        let mut ret = Self::zero(ndim, 1, hyperbolic);
         ret[Axes::E0] = 1.0;
         ret
     }
     /// Constructs a blade from a point.
-    pub fn from_point(ndim: u8, v: impl VectorRef) -> Self {
-        let mut ret = Self::from_vector(ndim, v);
+    pub fn from_point(ndim: u8, v: impl VectorRef, hyperbolic: bool) -> Self {
+        let mut ret = Self::from_vector(ndim, v, hyperbolic);
         ret[Axes::E0] = 1.0;
         ret
     }
@@ -111,8 +115,8 @@ impl Blade {
     }
 
     /// Constructs a blade from a vector.
-    pub fn from_vector(ndim: u8, v: impl VectorRef) -> Self {
-        let mut ret = Self::zero(ndim, 1);
+    pub fn from_vector(ndim: u8, v: impl VectorRef, hyperbolic: bool) -> Self {
+        let mut ret = Self::zero(ndim, 1, hyperbolic);
         for (i, x) in v.iter_ndim(ndim).enumerate() {
             ret[Axes::euclidean(i as u8)] = x;
         }
@@ -129,7 +133,7 @@ impl Blade {
 
     /// Constructs a blade from a hyperplane.
     pub fn from_hyperplane(ndim: u8, h: &Hyperplane) -> Self {
-        let mut ret = Self::from_vector(ndim, h.normal());
+        let mut ret = Self::from_vector(ndim, h.normal(), h.hyperbolic);
         ret[Axes::E0] = -h.distance;
         ret.right_complement()
     }
@@ -144,6 +148,7 @@ impl Blade {
         Some(Hyperplane {
             normal: normal / mag,
             distance: -crate::util::try_div(b[Axes::E0], mag)?,
+            hyperbolic: self.hyperbolic,
         })
     }
 
@@ -170,7 +175,7 @@ impl Blade {
     /// [bulk]:
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Bulk_and_weight
     pub fn bulk(&self) -> Self {
-        let mut bulk = Blade::zero(self.ndim, self.grade);
+        let mut bulk = Blade::zero(self.ndim, self.grade, self.hyperbolic);
         for (i, &x) in self.coefficients.iter().enumerate() {
             if !self.axes_at_index(i).contains(Axes::E0) {
                 bulk.coefficients[i] = x;
@@ -184,7 +189,7 @@ impl Blade {
     /// [weight]:
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Bulk_and_weight
     pub fn weight(&self) -> Self {
-        let mut weight = Blade::zero(self.ndim, self.grade);
+        let mut weight = Blade::zero(self.ndim, self.grade, self.hyperbolic);
         for (i, &x) in self.coefficients.iter().enumerate() {
             if self.axes_at_index(i).contains(Axes::E0) {
                 weight.coefficients[i] = x;
@@ -210,7 +215,10 @@ impl Blade {
     /// unmodified.
     pub fn ensure_nonzero_weight(&self) -> Blade {
         if self.weight_is_zero() {
-            if let Some(product) = Blade::wedge(&Blade::from_term(self.ndim, Term::e0(1.0)), self) {
+            if let Some(product) = Blade::wedge(
+                &Blade::from_term(self.ndim, Term::e0(1.0, self.hyperbolic)),
+                self,
+            ) {
                 return product;
             }
         }
@@ -254,6 +262,7 @@ impl Blade {
         self.coefficients.iter().enumerate().map(|(i, &coef)| Term {
             coef,
             axes: self.axes_at_index(i),
+            hyperbolic: self.hyperbolic,
         })
     }
     /// Returns an iterator over the terms in the blade that are approximately
@@ -267,7 +276,7 @@ impl Blade {
         if ndim <= self.ndim {
             self.clone()
         } else {
-            let mut ret = Self::zero(ndim, self.grade);
+            let mut ret = Self::zero(ndim, self.grade, self.hyperbolic);
             for term in self.terms() {
                 ret += term;
             }
@@ -291,7 +300,7 @@ impl Blade {
             return None;
         }
 
-        let mut ret = Self::zero(ndim, grade);
+        let mut ret = Self::zero(ndim, grade, lhs.hyperbolic);
         for l in lhs.terms() {
             for r in rhs.terms() {
                 ret += Term::wedge(l, r);
@@ -337,8 +346,11 @@ impl Blade {
         let ndim = lhs.ndim;
 
         Some(
-            Term::scalar(Self::dot(&lhs.left_complement(), &rhs.left_complement())?)
-                .right_complement(ndim),
+            Term::scalar(
+                Self::dot(&lhs.left_complement(), &rhs.left_complement())?,
+                lhs.hyperbolic,
+            )
+            .right_complement(ndim),
         )
     }
 
@@ -348,7 +360,7 @@ impl Blade {
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Duals#Dual
     #[must_use]
     pub fn dual(&self) -> Self {
-        let mut ret = Self::zero(self.ndim, self.antigrade());
+        let mut ret = Self::zero(self.ndim, self.antigrade(), self.hyperbolic);
         for term in self.terms() {
             ret += term.dual(self.ndim);
         }
@@ -360,7 +372,7 @@ impl Blade {
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Duals#Antidual
     #[must_use]
     pub fn antidual(&self) -> Self {
-        let mut ret = Self::zero(self.ndim, self.antigrade());
+        let mut ret = Self::zero(self.ndim, self.antigrade(), self.hyperbolic);
         for term in self.terms() {
             ret += term.antidual(self.ndim);
         }
@@ -373,7 +385,7 @@ impl Blade {
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Complements
     #[must_use]
     pub fn right_complement(&self) -> Self {
-        let mut ret = Self::zero(self.ndim, self.antigrade());
+        let mut ret = Self::zero(self.ndim, self.antigrade(), self.hyperbolic);
         for term in self.terms() {
             ret += term.right_complement(self.ndim);
         }
@@ -385,7 +397,7 @@ impl Blade {
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Complements
     #[must_use]
     pub fn left_complement(&self) -> Self {
-        let mut ret = Self::zero(self.ndim, self.antigrade());
+        let mut ret = Self::zero(self.ndim, self.antigrade(), self.hyperbolic);
         for term in self.terms() {
             ret += term.left_complement(self.ndim);
         }
@@ -417,7 +429,7 @@ impl Blade {
     pub fn cross_product_3d(lhs: &Self, rhs: &Self) -> Option<Blade> {
         if lhs.ndim == 3 && rhs.ndim == 3 && lhs.is_vector() && rhs.is_vector() {
             let bivector = Blade::wedge(&lhs, &rhs)?;
-            let e0 = Blade::from_term(3, Term::e0(1.0));
+            let e0 = Blade::from_term(3, Term::e0(1.0, lhs.hyperbolic));
             Some(Blade::wedge(&bivector, &e0)?.antidual())
         } else {
             None
@@ -437,7 +449,8 @@ impl Blade {
                     let v = Vector::unit(ax as u8);
                     Some((
                         ax as u8,
-                        Blade::from_vector(ndim, v).orthogonal_projection_to(&rest)?,
+                        Blade::from_vector(ndim, v, self.hyperbolic)
+                            .orthogonal_projection_to(&rest)?,
                     ))
                 })
                 .max_by_key(|(_, blade)| FloatOrd(blade.mag2()))

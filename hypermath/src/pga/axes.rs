@@ -95,12 +95,12 @@ impl Axes {
     ///
     /// [geometric product]:
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Geometric_products
-    pub fn sign_of_geometric_product(lhs: Self, rhs: Self) -> Option<Sign> {
+    pub fn sign_of_geometric_product(lhs: Self, rhs: Self, hyperbolic: bool) -> Option<Sign> {
         // NOTE: If this is a performance bottleneck, it should be easy enough
         // to make a macro that produces a lookup table for this function.
 
-        // e₀ squares to 0.
-        if lhs.contains(Self::E0) && rhs.contains(Self::E0) {
+        // e₀ squares to 0 in euclidean space.
+        if !hyperbolic && lhs.contains(Self::E0) && rhs.contains(Self::E0) {
             return None;
         }
 
@@ -118,6 +118,11 @@ impl Axes {
             }
         }
 
+        // e₀ squares to -1 in hyperbolic space.
+        if lhs.contains(Self::E0) && rhs.contains(Self::E0) {
+            sign = -sign;
+        }
+
         Some(sign)
     }
     /// Returns the sign of the [geometric antiproduct] between `lhs` and `rhs`
@@ -125,17 +130,22 @@ impl Axes {
     ///
     /// [geometric antiproduct]:
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Geometric_products
-    pub fn sign_of_geometric_antiproduct(lhs: Self, rhs: Self, ndim: u8) -> Option<Sign> {
+    pub fn sign_of_geometric_antiproduct(
+        lhs: Self,
+        rhs: Self,
+        ndim: u8,
+        hyperbolic: bool,
+    ) -> Option<Sign> {
         let lc = lhs.unsigned_complement(ndim);
         let rc = rhs.unsigned_complement(ndim);
 
         let mut ret = Sign::Pos;
         // Use De Morgan's laws: take the right complement of each argument ...
-        ret *= lhs.sign_of_right_complement(ndim);
-        ret *= rhs.sign_of_right_complement(ndim);
+        ret *= lhs.sign_of_right_complement(ndim, hyperbolic);
+        ret *= rhs.sign_of_right_complement(ndim, hyperbolic);
         // ... then geometric-product them together ...
-        ret *= Self::sign_of_geometric_product(lc, rc)?;
-        ret *= (lc ^ rc).sign_of_left_complement(ndim);
+        ret *= Self::sign_of_geometric_product(lc, rc, hyperbolic)?;
+        ret *= (lc ^ rc).sign_of_left_complement(ndim, hyperbolic);
         // ... then return the sign flips after doing all of that.
         Some(ret)
     }
@@ -144,9 +154,9 @@ impl Axes {
     ///
     /// [right complement]:
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Complements
-    pub fn sign_of_right_complement(self, ndim: u8) -> Sign {
+    pub fn sign_of_right_complement(self, ndim: u8, hyperbolic: bool) -> Sign {
         let complement = self.unsigned_complement(ndim);
-        Self::sign_of_geometric_product(self, complement)
+        Self::sign_of_geometric_product(self, complement, hyperbolic)
             .expect("right complement should never be zero")
     }
     /// Returns the sign of the [left complement] of the basis blade in
@@ -154,9 +164,9 @@ impl Axes {
     ///
     /// [left complement]:
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Complements
-    pub fn sign_of_left_complement(self, ndim: u8) -> Sign {
+    pub fn sign_of_left_complement(self, ndim: u8, hyperbolic: bool) -> Sign {
         let complement = self.unsigned_complement(ndim);
-        Self::sign_of_geometric_product(complement, self)
+        Self::sign_of_geometric_product(complement, self, hyperbolic)
             .expect("left complement should never be zero")
     }
     /// Returns the unsigned geometric product of `lhs` and `rhs`.

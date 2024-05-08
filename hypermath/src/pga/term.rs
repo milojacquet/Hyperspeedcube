@@ -8,6 +8,8 @@ use crate::*;
 /// and a bitmask representing the bases.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct Term {
+    /// Whether or not it is in hyperbolic GA (true) or projective GA (false).
+    pub hyperbolic: bool,
     /// Coefficient.
     pub coef: Float,
     /// Bitset of basis blades.
@@ -95,30 +97,36 @@ impl MulAssign<Float> for Term {
 
 impl Term {
     /// Constructs a scalar term.
-    pub const fn scalar(x: Float) -> Self {
+    pub const fn scalar(x: Float, hyperbolic: bool) -> Self {
         Term {
             coef: x,
             axes: Axes::SCALAR,
+            hyperbolic,
         }
     }
     /// Constructs an e₀ term.
-    pub const fn e0(coef: Float) -> Self {
+    pub const fn e0(coef: Float, hyperbolic: bool) -> Self {
         Term {
             coef,
             axes: Axes::E0,
+            hyperbolic,
         }
     }
     /// Constructs a unit term.
-    pub const fn unit(axes: Axes) -> Self {
-        Term { coef: 1.0, axes }
+    pub const fn unit(axes: Axes, hyperbolic: bool) -> Self {
+        Term {
+            coef: 1.0,
+            axes,
+            hyperbolic,
+        }
     }
     /// Constructs a unit scalar term.
-    pub const fn scalar_unit() -> Self {
-        Self::unit(Axes::SCALAR)
+    pub const fn scalar_unit(hyperbolic: bool) -> Self {
+        Self::unit(Axes::SCALAR, hyperbolic)
     }
     /// Constructs a unit pseudoscalar term in `ndim`-dimensional space.
-    pub const fn antiscalar_unit(ndim: u8) -> Self {
-        Self::unit(Axes::antiscalar(ndim))
+    pub const fn antiscalar_unit(ndim: u8, hyperbolic: bool) -> Self {
+        Self::unit(Axes::antiscalar(ndim), hyperbolic)
     }
 
     /// Returns whether the term is approximately zero.
@@ -157,10 +165,11 @@ impl Term {
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Geometric_products
     #[must_use]
     pub fn geometric_product(lhs: Self, rhs: Self) -> Option<Self> {
-        let sign = Axes::sign_of_geometric_product(lhs.axes, rhs.axes)?;
+        let sign = Axes::sign_of_geometric_product(lhs.axes, rhs.axes, lhs.hyperbolic)?;
         Some(Term {
             coef: lhs.coef * rhs.coef * sign,
             axes: Axes::unsigned_geometric_product(lhs.axes, rhs.axes),
+            hyperbolic: lhs.hyperbolic,
         })
     }
     /// Returns the [geometric antiproduct] between `lhs` and `rhs` in
@@ -170,10 +179,11 @@ impl Term {
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Geometric_products
     #[must_use]
     pub fn geometric_antiproduct(lhs: Self, rhs: Self, ndim: u8) -> Option<Self> {
-        let sign = Axes::sign_of_geometric_antiproduct(lhs.axes, rhs.axes, ndim)?;
+        let sign = Axes::sign_of_geometric_antiproduct(lhs.axes, rhs.axes, ndim, lhs.hyperbolic)?;
         Some(Term {
             coef: lhs.coef * rhs.coef * sign,
             axes: Axes::unsigned_geometric_product(lhs.axes, rhs.axes),
+            hyperbolic: lhs.hyperbolic,
         })
     }
     /// Returns the [right complement] of the term in `ndim`-dimensional space.
@@ -182,10 +192,11 @@ impl Term {
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Complements
     #[must_use]
     pub fn right_complement(self, ndim: u8) -> Term {
-        let sign = self.axes.sign_of_right_complement(ndim);
+        let sign = self.axes.sign_of_right_complement(ndim, self.hyperbolic);
         Term {
             coef: self.coef * sign,
             axes: self.axes.unsigned_complement(ndim),
+            hyperbolic: self.hyperbolic,
         }
     }
     /// Returns the [left complement] of the term in `ndim`-dimensional space.
@@ -194,10 +205,11 @@ impl Term {
     ///     https://rigidgeometricalgebra.org/wiki/index.php?title=Complements
     #[must_use]
     pub fn left_complement(self, ndim: u8) -> Term {
-        let sign = self.axes.sign_of_left_complement(ndim);
+        let sign = self.axes.sign_of_left_complement(ndim, self.hyperbolic);
         Term {
             coef: self.coef * sign,
             axes: self.axes.unsigned_complement(ndim),
+            hyperbolic: self.hyperbolic,
         }
     }
 
@@ -265,9 +277,9 @@ mod tests {
     #[test]
     fn test_term_complements() {
         for ndim in 1..=7 {
-            let pss = Term::antiscalar_unit(ndim);
+            let pss = Term::antiscalar_unit(ndim, false);
             for i in 0..=ndim {
-                let term = Term::antiscalar_unit(i);
+                let term = Term::antiscalar_unit(i, false);
                 let grade = term.grade();
                 let lc = term.left_complement(ndim);
                 let rc = term.right_complement(ndim);
