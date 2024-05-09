@@ -57,6 +57,9 @@ impl PuzzleSimulation {
     pub fn ndim(&self) -> u8 {
         self.puzzle_type().ndim()
     }
+    pub fn hyperbolic(&self) -> bool {
+        self.puzzle_type().hyperbolic()
+    }
 
     /// Returns the latest piece transforms.
     pub fn piece_transforms(&self) -> &PerPiece<Motor> {
@@ -92,7 +95,7 @@ impl PuzzleSimulation {
         let axis = twist_info.axis;
         let grip = self.latest_state.compute_gripped_pieces(axis, layers);
 
-        let mut initial_transform = Motor::ident(self.ndim());
+        let mut initial_transform = Motor::ident(self.ndim(), self.hyperbolic());
         if let Some(partial) = self.partial_twist_drag_state.take() {
             if partial.grip == grip {
                 initial_transform = partial.transform;
@@ -120,7 +123,7 @@ impl PuzzleSimulation {
                         state: self.latest_state.clone(),
                         grip,
                         initial_transform,
-                        final_transform: Motor::ident(self.ndim()),
+                        final_transform: Motor::ident(self.ndim(), self.hyperbolic()),
                     });
                 }
                 self.blocking_anim.set(blocking_pieces);
@@ -185,12 +188,13 @@ impl PuzzleSimulation {
             axis,
             layers,
             grip,
-            transform: Motor::ident(self.ndim()),
+            transform: Motor::ident(self.ndim(), self.hyperbolic()),
         });
     }
     /// Updates a partial twist with a new cursor position.
     pub fn update_partial_twist(&mut self, surface_normal: Vector, parallel_drag_delta: Vector) {
         let puzzle = Arc::clone(self.puzzle_type());
+        let hyperbolic = self.hyperbolic();
         if let Some(partial) = &mut self.partial_twist_drag_state {
             let axis_vector = &puzzle.axes[partial.axis].vector;
             let Some(v1) = surface_normal.cross_product_3d(axis_vector).normalize() else {
@@ -201,7 +205,8 @@ impl PuzzleSimulation {
             };
             // TODO: consider scaling by torque (i.e., radius)
             let angle = v1.dot(&parallel_drag_delta);
-            let new_transform = Motor::from_angle_in_normalized_plane(3, &v2, &v1, angle);
+            let new_transform =
+                Motor::from_angle_in_normalized_plane(3, &v2, &v1, angle, hyperbolic);
             partial.transform = new_transform;
         }
         self.update_piece_transforms();
@@ -220,7 +225,7 @@ impl PuzzleSimulation {
             state: self.latest_state.clone(),
             grip: partial.grip,
             initial_transform: partial.transform,
-            final_transform: Motor::ident(self.ndim()),
+            final_transform: Motor::ident(self.ndim(), self.hyperbolic()),
         })
     }
     /// Confirms a partial twist, completing whatever move is closest (or

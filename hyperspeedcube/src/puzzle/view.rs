@@ -43,7 +43,7 @@ impl PuzzleView {
             camera: Camera {
                 prefs: ViewPreferences::default(),
                 target_size: [1, 1],
-                rot: Motor::ident(puzzle.ndim()),
+                rot: Motor::ident(puzzle.ndim(), puzzle.hyperbolic()),
                 zoom: 0.5,
             },
 
@@ -118,6 +118,8 @@ impl PuzzleView {
         let cursor_delta = Option::zip(cursor_pos, self.cursor_pos).map(|(old, new)| new - old);
         self.cursor_pos = cursor_pos;
 
+        let hyperbolic = self.puzzle().hyperbolic();
+
         // Update drag state.
         if let Some(drag_state) = &mut self.drag_state {
             match drag_state {
@@ -125,10 +127,11 @@ impl PuzzleView {
                 DragState::ViewRot { z_axis } => {
                     if let Some(delta) = cursor_delta {
                         let cgmath::Vector2 { x: dx, y: dy } = delta;
-                        self.camera.rot =
-                            pga::Motor::from_angle_in_axis_plane(ndim, 0, *z_axis, dx as _)
-                                * pga::Motor::from_angle_in_axis_plane(ndim, 1, *z_axis, dy as _)
-                                * &self.camera.rot;
+                        self.camera.rot = pga::Motor::from_angle_in_axis_plane(
+                            ndim, 0, *z_axis, dx as _, hyperbolic,
+                        ) * pga::Motor::from_angle_in_axis_plane(
+                            ndim, 1, *z_axis, dy as _, hyperbolic,
+                        ) * &self.camera.rot;
                     }
                 }
 
@@ -259,7 +262,7 @@ impl PuzzleView {
     }
 
     pub(crate) fn reset_camera(&mut self) {
-        self.camera.rot = Motor::ident(self.puzzle().ndim());
+        self.camera.rot = Motor::ident(self.puzzle().ndim(), self.puzzle().hyperbolic());
     }
 
     pub(crate) fn do_sticker_click(&self, direction: Sign) {
@@ -296,8 +299,18 @@ impl PuzzleView {
 
                 // Aim for a 180 degree counterclockwise rotation around the axis.
                 let target = match hov.backface {
-                    false => Motor::from_normalized_vector_product(ndim, &u, &v),
-                    true => Motor::from_normalized_vector_product(ndim, &v, &u),
+                    false => Motor::from_normalized_vector_product(
+                        ndim,
+                        &u,
+                        &v,
+                        self.puzzle().hyperbolic(),
+                    ),
+                    true => Motor::from_normalized_vector_product(
+                        ndim,
+                        &v,
+                        &u,
+                        self.puzzle().hyperbolic(),
+                    ),
                 };
                 let best_twist = candidates.min_by_key(|&twist| {
                     // `score` ranges from -1 to +1. If it's a positive number,
