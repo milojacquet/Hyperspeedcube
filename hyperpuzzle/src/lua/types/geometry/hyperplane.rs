@@ -28,9 +28,11 @@ pub struct LuaHyperplane(pub Hyperplane);
 
 impl<'lua> FromLua<'lua> for LuaHyperplane {
     fn from_lua(value: LuaValue<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
+
         if let Ok(LuaVector(v)) = lua.unpack(value.clone()) {
             Ok(Self(
-                Hyperplane::from_pole(v)
+                Hyperplane::from_pole(v, hyperbolic)
                     .ok_or("plane pole cannot be zero")
                     .into_lua_err()?,
             ))
@@ -59,6 +61,7 @@ impl<'lua> IntoLua<'lua> for LuaHyperplane {
 impl LuaHyperplane {
     /// Constructs a plane from a table of values.
     pub fn construct_from_table(lua: &Lua, t: LuaTable<'_>) -> LuaResult<Self> {
+        let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
         let arg_count = t.clone().pairs::<LuaValue<'_>, LuaValue<'_>>().count();
         let ensure_args_len = |n| {
             if n == arg_count {
@@ -84,13 +87,15 @@ impl LuaHyperplane {
 
         if let Some(LuaVector(pole)) = pole {
             ensure_args_len(1)?;
-            Hyperplane::from_pole(pole).ok_or("plane pole cannot be zero")
+            Hyperplane::from_pole(pole, hyperbolic).ok_or("plane pole cannot be zero")
         } else if let Some(LuaVector(normal)) = normal {
             ensure_args_len(2)?;
             if let Some(distance) = distance {
-                Hyperplane::new(normal, distance).ok_or("plane normal vector cannot be zero")
+                Hyperplane::new(normal, distance, hyperbolic)
+                    .ok_or("plane normal vector cannot be zero")
             } else if let Some(LuaPoint(point)) = point {
-                Hyperplane::through_point(normal, point).ok_or("plane normal vector cannot be zero")
+                Hyperplane::through_point(normal, point, hyperbolic)
+                    .ok_or("plane normal vector cannot be zero")
             } else {
                 Err("either `distance` or `point` must be specified with `normal`")
             }

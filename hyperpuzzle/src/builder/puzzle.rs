@@ -38,6 +38,11 @@ impl PuzzleBuilder {
     pub fn ndim(&self) -> u8 {
         self.space().lock().ndim()
     }
+    /// Returns if the space is hyperbolic. Equivalent to
+    /// `self.shape.lock().space.hyperbolic`.
+    pub fn hyperbolic(&self) -> bool {
+        self.space().lock().hyperbolic
+    }
     /// Returns the underlying space the puzzle is built in. Equivalent to
     /// `self.shape.lock().space`
     pub fn space(&self) -> Arc<Mutex<Space>> {
@@ -55,17 +60,19 @@ impl PuzzleBuilder {
         let name = self.name.clone();
         let id = self.id.clone();
 
-        let space_arc = Arc::new(Mutex::new(Space::new(self.ndim())));
+        let space_arc = Arc::new(Mutex::new(Space::new(self.ndim(), self.hyperbolic())));
         let shape_mutex = self.shape.lock().clone(&space_arc)?;
         let shape = shape_mutex.lock();
         let twist_system_mutex = self.twists.lock().clone(&space_arc)?;
         let twist_system = twist_system_mutex.lock();
         // Take `space` out of the `Arc<Mutex<T>>`.
-        let space = std::mem::replace(&mut *space_arc.lock(), Space::new(self.ndim()));
+        let space = std::mem::replace(
+            &mut *space_arc.lock(),
+            Space::new(self.ndim(), self.hyperbolic()),
+        );
         drop(space_arc); // Don't use that new space! It's dead to us.
-        let ndim = space.ndim();
 
-        let mut mesh = Mesh::new_empty(self.ndim());
+        let mut mesh = Mesh::new_empty(self.ndim(), self.hyperbolic());
         mesh.color_count = shape.colors.len();
 
         // Only colored surfaces have an entry in `surface_colors`.
@@ -134,7 +141,7 @@ impl PuzzleBuilder {
                     })
                 })
                 // Skip internals for 4D+.
-                .filter_ok(|data| ndim < 4 || data.color != Color::INTERNAL)
+                .filter_ok(|data| self.ndim() < 4 || data.color != Color::INTERNAL)
                 .try_collect()?;
             // Sort the stickers, as mentioned above.
             stickers_of_piece.sort();

@@ -9,6 +9,7 @@ use super::{Facet, PerPiece, PerSticker, Piece};
 #[derive(Debug, Clone)]
 pub struct Mesh {
     ndim: u8,
+    hyperbolic: bool,
 
     /// Number of sticker colors in the mesh.
     pub color_count: usize,
@@ -64,15 +65,16 @@ pub struct Mesh {
 
 impl Default for Mesh {
     fn default() -> Self {
-        Self::new_empty(1)
+        Self::new_empty(1, false)
     }
 }
 
 impl Mesh {
     /// Constructs an empty mesh.
-    pub fn new_empty(ndim: u8) -> Self {
+    pub fn new_empty(ndim: u8, hyperbolic: bool) -> Self {
         Mesh {
             ndim,
+            hyperbolic,
             color_count: 0,
             polygon_count: 0,
             sticker_count: 0,
@@ -106,6 +108,10 @@ impl Mesh {
     /// Returns the number of dimensions of the mesh.
     pub fn ndim(&self) -> u8 {
         self.ndim
+    }
+    /// Returns whether the mesh is hyperbolic.
+    pub fn hyperbolic(&self) -> bool {
+        self.hyperbolic
     }
     /// Returns the number of vertices in the mesh.
     pub fn vertex_count(&self) -> usize {

@@ -135,7 +135,10 @@ impl LibraryDb {
     pub fn build_puzzle(lua: &Lua, id: &str) -> Result<Arc<Puzzle>> {
         let LuaNdim(ndim) =
             Self::with_object(lua, id, |cached: &CachedPuzzle| Ok(cached.params.ndim))?;
-        let space = Arc::new(Mutex::new(Space::new(ndim)));
+        let hyperbolic = Self::with_object(lua, id, |cached: &CachedPuzzle| {
+            Ok(cached.params.hyperbolic)
+        })?;
+        let space = Arc::new(Mutex::new(Space::new(ndim, hyperbolic)));
         Ok(Self::build_from_id::<PuzzleParams>(lua, &space, id)?)
     }
 

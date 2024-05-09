@@ -65,8 +65,9 @@ impl<'lua> FromLua<'lua> for LuaVector {
 
 impl<'lua> IntoLua<'lua> for LuaVector {
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<LuaValue<'lua>> {
+        let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
         let ndim = LuaNdim::get(lua)?;
-        LuaBlade(pga::Blade::from_vector(ndim, self.0)).into_lua(lua)
+        LuaBlade(pga::Blade::from_vector(ndim, self.0, hyperbolic)).into_lua(lua)
     }
 }
 

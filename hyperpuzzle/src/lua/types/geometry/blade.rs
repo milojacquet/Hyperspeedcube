@@ -9,13 +9,15 @@ pub struct LuaBlade(pub Blade);
 
 impl<'lua> FromLua<'lua> for LuaBlade {
     fn from_lua(value: LuaValue<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
+
         if let Ok(m) = cast_userdata(lua, &value) {
             Ok(m)
         } else if let Ok(n) = lua.unpack(value.clone()) {
-            Ok(Self(Blade::scalar(LuaNdim::get(lua)?, n)))
+            Ok(Self(Blade::scalar(LuaNdim::get(lua)?, n, hyperbolic)))
         } else if let Ok(LuaVector(v)) = lua.unpack(value.clone()) {
             let ndim = enforce_ndim(lua, v.ndim())?;
-            Ok(Self(Blade::from_vector(ndim, v)))
+            Ok(Self(Blade::from_vector(ndim, v, hyperbolic)))
         } else if let Ok(LuaHyperplane(h)) = lua.unpack(value.clone()) {
             let ndim = enforce_ndim(lua, h.normal().ndim())?;
             Ok(Self(Blade::from_hyperplane(ndim, &h)))
@@ -205,11 +207,13 @@ impl LuaUserData for LuaBlade {
 impl LuaBlade {
     /// Constructs a blade representing a vector.
     pub fn from_vector(lua: &Lua, v: impl VectorRef) -> LuaResult<Self> {
-        Ok(Self(Blade::from_vector(LuaNdim::get(lua)?, v)))
+        let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
+        Ok(Self(Blade::from_vector(LuaNdim::get(lua)?, v, hyperbolic)))
     }
     /// Constructs a blade representing a point.
     pub fn from_point(lua: &Lua, v: impl VectorRef) -> LuaResult<Self> {
-        Ok(Self(Blade::from_point(LuaNdim::get(lua)?, v)))
+        let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
+        Ok(Self(Blade::from_point(LuaNdim::get(lua)?, v, hyperbolic)))
     }
 }
 

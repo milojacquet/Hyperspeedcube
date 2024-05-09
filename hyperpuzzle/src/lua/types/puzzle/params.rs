@@ -16,6 +16,8 @@ pub struct PuzzleParams {
     pub id: String,
     /// Number of dimensions of the space in which the puzzle is constructed.
     pub ndim: LuaNdim,
+    /// Number of dimensions of the space in which the puzzle is constructed.
+    pub hyperbolic: bool,
     /// Symmetry of the puzzle.
     pub symmetry: Option<LuaSymmetry>,
 
@@ -45,6 +47,7 @@ impl<'lua> FromLua<'lua> for PuzzleParams {
 
         let name: String;
         let ndim: LuaNdim;
+        let hyperbolic: bool;
         let symmetry: Option<LuaSymmetry>;
         let shape: LuaNilStringOrTable<'lua>;
         let twists: LuaNilStringOrTable<'lua>;
@@ -57,6 +60,7 @@ impl<'lua> FromLua<'lua> for PuzzleParams {
             name,
 
             ndim,
+            hyperbolic,
             symmetry,
 
             shape,
@@ -79,6 +83,7 @@ impl<'lua> FromLua<'lua> for PuzzleParams {
         Ok(PuzzleParams {
             id: String::new(), // This is overwritten in `puzzledb:add()`.
             ndim,
+            hyperbolic,
             symmetry,
 
             shape: shape.to_lua_registry(lua)?,

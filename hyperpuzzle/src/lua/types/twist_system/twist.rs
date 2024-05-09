@@ -52,13 +52,14 @@ impl LuaUserData for LuaTwist {
 
         methods.add_meta_method(LuaMetaMethod::Pow, |lua, this, power: i16| {
             let ndim = LuaNdim::get(lua)?;
+            let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
 
             let db = this.db.lock();
             let this = db.get(this.id).into_lua_err()?;
             // Convert to `i64` to guard against overflow.
             let mut transform = (0..(power as i64).abs())
                 .map(|_| &this.transform)
-                .fold(Motor::ident(ndim), |a, b| b * a);
+                .fold(Motor::ident(ndim, hyperbolic), |a, b| b * a);
             if power < 0 {
                 transform = transform.reverse();
             }

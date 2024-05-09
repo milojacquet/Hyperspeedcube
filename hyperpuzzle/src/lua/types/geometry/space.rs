@@ -32,6 +32,11 @@ impl LuaSpace {
         f(&mut Self::get(lua)?.lock()).into_lua_err()
     }
 
+    /// Whether the space is hyperbolic
+    pub fn hyperbolic(&self) -> bool {
+        self.lock().hyperbolic
+    }
+
     /// Sets a space to be the global space, executes `f`, and then restores the
     /// global space to its prior value.
     pub fn with_this_as_global_space<R>(

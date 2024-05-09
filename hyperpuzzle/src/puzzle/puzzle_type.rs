@@ -63,6 +63,11 @@ impl Puzzle {
         self.mesh.ndim()
     }
 
+    /// Returns if the puzzle is hyperbolic.
+    pub fn hyperbolic(&self) -> bool {
+        self.mesh.hyperbolic()
+    }
+
     pub(crate) fn opposite_twist_axis(&self, _axis: Axis) -> Option<Axis> {
         todo!()
     }

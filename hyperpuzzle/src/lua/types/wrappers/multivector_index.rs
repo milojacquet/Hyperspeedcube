@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use hypermath::pga::*;
 use hypermath::prelude::*;
 
@@ -13,6 +11,8 @@ pub struct LuaMultivectorIndex {
     pub axes: Axes,
     /// Sign to apply when reading/writing this term.
     pub sign: Sign,
+    /// If the space is hyperbolic.
+    pub hyperbolic: bool,
 
     /// String description of the index.
     pub string: String,
@@ -27,35 +27,16 @@ impl LuaMultivectorIndex {
             Term {
                 coef: self.sign.to_num(),
                 axes: self.axes,
+                hyperbolic: self.hyperbolic,
             },
         )
     }
-}
 
-impl<'lua> FromLua<'lua> for LuaMultivectorIndex {
-    fn from_lua(lua_value: LuaValue<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        if let Ok(LuaVectorIndex(i)) = LuaVectorIndex::from_lua(lua_value.clone(), lua) {
-            Ok(LuaMultivectorIndex {
-                axes: Axes::euclidean(i),
-                sign: Sign::Pos,
-                string: match lua.coerce_string(lua_value)? {
-                    Some(s) => s.to_str()?.to_string(),
-                    None => String::new(),
-                },
-            })
-        } else {
-            String::from_lua(lua_value, lua)?.parse()
-        }
-        .into_lua_err()
-    }
-}
-
-impl FromStr for LuaMultivectorIndex {
-    type Err = String;
-
-    fn from_str(string: &str) -> Result<Self, Self::Err> {
+    fn from_str(string: &str, hyperbolic: bool) -> Result<Self, String> {
         let mut axes = Axes::empty();
         let mut sign = Sign::Pos;
+        //let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
+
         for c in string.chars() {
             let new_axis: Axes = match c {
                 // Remember, Lua is 1-indexed so the X axis is 1.
@@ -72,13 +53,40 @@ impl FromStr for LuaMultivectorIndex {
 
                 _ => return Err(format!("unknown axis {c:?}")),
             };
-            let Some(new_sign) = Axes::sign_of_geometric_product(axes, new_axis) else {
+
+            let Some(new_sign) = Axes::sign_of_geometric_product(axes, new_axis, hyperbolic) else {
                 return Err(format!("component '{string}' is always zero"));
             };
             sign *= new_sign;
             axes ^= new_axis;
         }
         let string = string.to_owned();
-        Ok(LuaMultivectorIndex { axes, sign, string })
+        Ok(LuaMultivectorIndex {
+            axes,
+            sign,
+            string,
+            hyperbolic,
+        })
+    }
+}
+
+impl<'lua> FromLua<'lua> for LuaMultivectorIndex {
+    fn from_lua(lua_value: LuaValue<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
+
+        if let Ok(LuaVectorIndex(i)) = LuaVectorIndex::from_lua(lua_value.clone(), lua) {
+            Ok(LuaMultivectorIndex {
+                axes: Axes::euclidean(i),
+                sign: Sign::Pos,
+                string: match lua.coerce_string(lua_value)? {
+                    Some(s) => s.to_str()?.to_string(),
+                    None => String::new(),
+                },
+                hyperbolic,
+            })
+        } else {
+            Self::from_str(&String::from_lua(lua_value, lua)?, hyperbolic)
+        }
+        .into_lua_err()
     }
 }

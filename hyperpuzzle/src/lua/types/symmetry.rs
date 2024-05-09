@@ -57,9 +57,11 @@ impl LuaSymmetry {
         let is_all_numbers = args.iter().all(|arg| arg.is_integer() || arg.is_number());
 
         let init: Vec<Transformable> = if is_all_numbers {
+            let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
             vec![Transformable::Blade(LuaBlade(pga::Blade::from_vector(
                 ndim,
                 self.vector_from_args(lua, args)?,
+                hyperbolic,
             )))]
         } else {
             args.iter()

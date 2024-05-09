@@ -18,7 +18,7 @@ pub struct PuzzleState {
 impl PuzzleState {
     /// Constructs a new instance of a puzzle.
     pub fn new(puzzle_type: Arc<Puzzle>) -> Self {
-        let ident = pga::Motor::ident(puzzle_type.ndim());
+        let ident = pga::Motor::ident(puzzle_type.ndim(), puzzle_type.hyperbolic());
         let piece_transforms = puzzle_type.pieces.map_ref(|_, _| ident.clone());
         PuzzleState {
             puzzle_type,

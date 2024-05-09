@@ -44,6 +44,7 @@ impl LuaTransform {
     /// Constructs a rotation from a table of values.
     pub fn construct_rotation(lua: &Lua, t: LuaTable<'_>) -> LuaResult<Self> {
         let ndim = LuaNdim::get(lua)?;
+        let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
 
         // TODO: allow fixing multiple vectors using blades
         let fix: Option<LuaBlade>;
@@ -51,12 +52,12 @@ impl LuaTransform {
         let to: LuaVector;
         unpack_table!(lua.unpack(t { fix, from, to }));
 
-        let LuaBlade(fix) = fix.unwrap_or(LuaBlade(Blade::one(ndim)));
+        let LuaBlade(fix) = fix.unwrap_or(LuaBlade(Blade::one(ndim, hyperbolic)));
         let LuaVector(from) = from;
         let LuaVector(to) = to;
 
-        let from = Blade::from_vector(ndim, from);
-        let to = Blade::from_vector(ndim, to);
+        let from = Blade::from_vector(ndim, from, hyperbolic);
+        let to = Blade::from_vector(ndim, to, hyperbolic);
 
         // Reject `from` and `to` from `fix`.
         let from = from
@@ -68,7 +69,7 @@ impl LuaTransform {
             .and_then(|b| b.to_vector())
             .unwrap_or(vector![]);
 
-        let rot = Motor::rotation(ndim, from, to)
+        let rot = Motor::rotation(ndim, from, to, hyperbolic)
             .ok_or("error constructing rotation (vectors may be zero, or opposite")
             .into_lua_err()?;
 
@@ -78,13 +79,14 @@ impl LuaTransform {
     /// point, or through the origin.
     pub fn construct_reflection(lua: &Lua, arg: Option<LuaBlade>) -> LuaResult<Self> {
         let ndim = LuaNdim::get(lua)?;
+        let hyperbolic = LuaSpace::get(lua)?.hyperbolic();
 
         Ok(Self(match arg {
             Some(LuaBlade(b)) => {
                 if let Some(point) = b.to_point() {
-                    Motor::point_reflection(ndim, point)
+                    Motor::point_reflection(ndim, point, hyperbolic)
                 } else if let Some(vector) = b.to_vector() {
-                    Motor::vector_reflection(ndim, vector)
+                    Motor::vector_reflection(ndim, vector, hyperbolic)
                         .ok_or("cannot reflect through zero vector")
                         .into_lua_err()?
                 } else if let Some(hyperplane) = b.to_hyperplane() {
@@ -97,7 +99,7 @@ impl LuaTransform {
                     });
                 }
             }
-            None => Motor::point_reflection(ndim, vector![]), // reflect through origin
+            None => Motor::point_reflection(ndim, vector![], hyperbolic), // reflect through origin
         }))
     }
 }
